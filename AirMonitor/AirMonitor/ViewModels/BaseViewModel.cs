@@ -23,6 +23,7 @@ namespace AirMonitor.ViewModels
             RaisePropertyChanged(propertyName);
 
             return true;
+
         }
     }
 }
