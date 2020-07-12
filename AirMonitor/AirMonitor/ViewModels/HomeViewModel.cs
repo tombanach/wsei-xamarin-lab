@@ -1,94 +1,87 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Web;
 using System.Windows.Input;
+using AirMonitor.Helpers;
 using AirMonitor.Models;
 using AirMonitor.Views;
 using Newtonsoft.Json;
-using Xamarin.Forms;
 using Xamarin.Essentials;
-using System.Globalization;
-using System.Web;
+using Xamarin.Forms;
+using Xamarin.Forms.Maps;
 
 namespace AirMonitor.ViewModels
 {
     public class HomeViewModel : BaseViewModel
     {
         private readonly INavigation _navigation;
+        private readonly DatabaseHelper _db;
 
         public HomeViewModel(INavigation navigation)
         {
             _navigation = navigation;
-
-            Initialize(false);
+            Initialize();
         }
 
-        private async Task Initialize(bool forceRefresh)
-        {
-            IsBusy = true;
-
-            await LoadData(forceRefresh);
-
-            IsBusy = false;
-        }
-
-        private async Task LoadData(bool forceRefresh)
-        {
-            var location = await GetLocation();
-            var data = await Task.Run(async () =>
-            {
-                var installations = await GetInstallations(location, forceRefresh, maxResults: 3);
-                return await GetMeasurementsForInstallations(installations, forceRefresh);
-            });
-
-            Items = new List<Measurement>(data);
-        }
-
-        private ICommand _goToDetailsCommand;
-        public ICommand GoToDetailsCommand => _goToDetailsCommand ?? (_goToDetailsCommand = new Command<Measurement>(OnGoToDetails));
-
-        private void OnGoToDetails(Measurement item)
-        {
-            _navigation.PushAsync(new DetailsPage(item));
-        }
-
-        private ICommand _refreshCommand;
-        public ICommand RefreshCommand => _refreshCommand ?? (_refreshCommand = new Command(async () => await OnRefreshCommand()));
-
-        private async Task OnRefreshCommand()
-        {
-            IsRefreshing = true;
-
-            await LoadData(true);
-
-            IsRefreshing = false;
-        }
-
-        private List<Measurement> _items;
-        public List<Measurement> Items
+        private List<Installation> _items;
+        public List<Installation> Items
         {
             get => _items;
             set => SetProperty(ref _items, value);
         }
 
-        private bool _isBusy;
-        public bool IsBusy
+        private List<MapLocation> _locations;
+        public List<MapLocation> Locations
         {
-            get => _isBusy;
-            set => SetProperty(ref _isBusy, value);
+            get => _locations;
+            set => SetProperty(ref _locations, value);
         }
 
-        private bool _isRefreshing;
-        public bool IsRefreshing
+        private string _remaining;
+        public string Remaining
         {
-            get => _isRefreshing;
-            set => SetProperty(ref _isRefreshing, value);
+            get => _remaining;
+            set => SetProperty(ref _remaining, value);
         }
 
-        private async Task<IEnumerable<Installation>> GetInstallations(Location location, bool forceRefresh, double maxDistanceInKm = 3, int maxResults = -1)
+        private bool _isVisible;
+        public bool IsVisible
+        {
+            get => _isVisible;
+            set => SetProperty(ref _isVisible, value);
+        }
+        private bool _isRunning;
+        public bool IsRunning
+        {
+            get => _isRunning;
+            set => SetProperty(ref _isRunning, value);
+        }
+
+        private async Task Initialize()
+        {
+            
+            IsRunning = true;
+            IsVisible = true;
+            var location = await GetLocation();
+            var installations = await GetInstallations(location, maxResults: 3);
+            var installationsWithDetails = await GetMeasurementsForInstalations(installations);
+            Items = new List<Installation>(installationsWithDetails);
+            Locations = Items.Select(x => new MapLocation
+            {
+                Address = x.Address.Description,
+                Description = "CAQI: " + x.Measurement.Current.Values.FirstOrDefault().Value.ToString(),
+                Position = new Position(x.Location.Latitude, x.Location.Longitude)
+            }).ToList();
+            IsRunning = false;
+            IsVisible = false;
+            
+        }
+        private async Task<IEnumerable<Installation>> GetInstallations(Location location, double maxDistanceInKm = 3, int maxResults = -1)
         {
             if (location == null)
             {
@@ -96,83 +89,45 @@ namespace AirMonitor.ViewModels
                 return null;
             }
 
-            IEnumerable<Installation> result;
+            var query = GetQuery(new Dictionary<string, object>
+            {
+                { "lat", location.Latitude },
+                { "lng", location.Longitude },
+                { "maxDistanceKM", maxDistanceInKm },
+                { "maxResults", maxResults }
+            });
+            var url = GetAirlyApiUrl(App.AirlyApiInstallationUrl, query);
 
-            var savedMeasurements = App.DbHelper.GetMeasurements();
+            var response = await GetHttpResponseAsync<IEnumerable<Installation>>(url);
+            return response;
+        }
 
-            if (forceRefresh || ShouldUpdateData(savedMeasurements))
+        private async Task<IEnumerable<Installation>> GetMeasurementsForInstalations(IEnumerable<Installation> installations)
+        {
+            var installationsUpdated = new List<Installation>();
+            foreach (var installation in installations)
             {
                 var query = GetQuery(new Dictionary<string, object>
                 {
-                    { "lat", location.Latitude },
-                    { "lng", location.Longitude },
-                    { "maxDistanceKM", maxDistanceInKm },
-                    { "maxResults", maxResults }
+                    {"installationId", installation.Id }
                 });
-                var url = GetAirlyApiUrl(App.AirlyApiInstallationUrl, query);
-
-                result = await GetHttpResponseAsync<IEnumerable<Installation>>(url);
-                
-                App.DbHelper.SaveInstallations(result);
+                var url = GetAirlyApiUrl(App.AirlyApiMeasurementUrl, query);
+                var response = await GetHttpResponseAsync<Measurement>(url);
+                installation.Measurement = response;
+                installationsUpdated.Add(installation);
             }
-            else
-            {
-                result = App.DbHelper.GetInstallations();
-            }
-
-            return result;
+            return installationsUpdated;
         }
 
-        private async Task<IEnumerable<Measurement>> GetMeasurementsForInstallations(IEnumerable<Installation> installations, bool forceRefresh)
+        private string GetAirlyApiUrl(string path, string query)
         {
-            if (installations == null)
-            {
-                System.Diagnostics.Debug.WriteLine("No installations data.");
-                return null;
-            }
+            var builder = new UriBuilder(App.AirlyApiUrl);
+            builder.Port = -1;
+            builder.Path += path;
+            builder.Query = query;
+            string url = builder.ToString();
 
-            var measurements = new List<Measurement>();
-            var savedMeasurements = App.DbHelper.GetMeasurements();
-
-            if (forceRefresh || ShouldUpdateData(savedMeasurements))
-            {
-                foreach (var installation in installations)
-                {
-                    var query = GetQuery(new Dictionary<string, object>
-                    {
-                        { "installationId", installation.Id }
-                    });
-                    var url = GetAirlyApiUrl(App.AirlyApiMeasurementUrl, query);
-
-                    var response = await GetHttpResponseAsync<Measurement>(url);
-
-                    if (response != null)
-                    {
-                        response.Installation = installation;
-                        measurements.Add(response);
-                    }
-                }
-
-                App.DbHelper.SaveMeasurements(measurements);
-            }
-            else
-            {
-                measurements = savedMeasurements.ToList();
-            }
-
-            foreach (var measurement in measurements)
-            {
-                measurement.CurrentDisplayValue = (int)Math.Round(measurement.Current?.Indexes?.FirstOrDefault()?.Value ?? 0);
-            }
-
-            return measurements;
-        }
-
-        private bool ShouldUpdateData(IEnumerable<Measurement> savedMeasurements)
-        {
-            var isAnyMeasurementOld = savedMeasurements.Any(s => s.Current.TillDateTime.AddMinutes(60) < DateTime.UtcNow);
-
-            return savedMeasurements.Count() == 0 || isAnyMeasurementOld;
+            return url;
         }
 
         private string GetQuery(IDictionary<string, object> args)
@@ -196,17 +151,6 @@ namespace AirMonitor.ViewModels
             return query.ToString();
         }
 
-        private string GetAirlyApiUrl(string path, string query)
-        {
-            var builder = new UriBuilder(App.AirlyApiUrl);
-            builder.Port = -1;
-            builder.Path += path;
-            builder.Query = query;
-            string url = builder.ToString();
-
-            return url;
-        }
-
         private static HttpClient GetHttpClient()
         {
             var client = new HttpClient();
@@ -214,10 +158,10 @@ namespace AirMonitor.ViewModels
 
             client.DefaultRequestHeaders.Add("Accept", "application/json");
             client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip");
+            client.DefaultRequestHeaders.Add("Accept-Language", "pl");
             client.DefaultRequestHeaders.Add("apikey", App.AirlyApiKey);
             return client;
         }
-
         private async Task<T> GetHttpResponseAsync<T>(string url)
         {
             try
@@ -228,6 +172,7 @@ namespace AirMonitor.ViewModels
                 if (response.Headers.TryGetValues("X-RateLimit-Limit-day", out var dayLimit) &&
                     response.Headers.TryGetValues("X-RateLimit-Remaining-day", out var dayLimitRemaining))
                 {
+                    Remaining = dayLimitRemaining.ToArray()[0];
                     System.Diagnostics.Debug.WriteLine($"Day limit: {dayLimit?.FirstOrDefault()}, remaining: {dayLimitRemaining?.FirstOrDefault()}");
                 }
 
@@ -264,43 +209,25 @@ namespace AirMonitor.ViewModels
 
         private async Task<Location> GetLocation()
         {
-            try
-            {
-                Location location = await Geolocation.GetLastKnownLocationAsync();
+            Location location = await Geolocation.GetLastKnownLocationAsync();
+            return location;
+        }
 
-                if (location == null)
-                {
-                    var request = new GeolocationRequest(GeolocationAccuracy.Medium);
-                    location = await Geolocation.GetLocationAsync(request);
-                }
+        private ICommand _goToDetailsCommand;
+        public ICommand GoToDetailsCommand => _goToDetailsCommand ?? (_goToDetailsCommand = new Command<Installation>(installation => OnGoToDetails(installation)));
 
-                if (location != null)
-                {
-                    Console.WriteLine($"Latitude: {location.Latitude}, Longitude: {location.Longitude}");
-                }
+        private void OnGoToDetails(Installation installation)
+        {
+            _navigation.PushAsync(new DetailsPage(installation));
+        }
 
-                return location;
-            }
+        private ICommand _goToDetailsCommandFromMap;
+        public ICommand GoToDetailsCommandFromMap => _goToDetailsCommandFromMap ?? (_goToDetailsCommandFromMap = new Command<string>(address => OnGoToDetailsFromMap(address)));
 
-
-            catch (FeatureNotSupportedException ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex);
-            }
-            catch (FeatureNotEnabledException ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex);
-            }
-            catch (PermissionException ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex);
-            }
-
-            return null;
+        private void OnGoToDetailsFromMap(string address)
+        {
+            var installation = Items.First(x => x.Address.Description == address);
+            _navigation.PushAsync(new DetailsPage(installation));
         }
     }
 }

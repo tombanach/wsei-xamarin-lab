@@ -1,125 +1,105 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using AirMonitor.Models;
-using AirMonitor.Models.Tables;
+﻿using AirMonitor.Models;
 using Newtonsoft.Json;
 using SQLite;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace AirMonitor.Helpers
 {
-    public class DatabaseHelper : IDisposable
+    public class DatabaseHelper
     {
-        private SQLiteConnection _connection;
-
-        public void Initialize()
+        private readonly string _databasePath;
+        private readonly SQLiteAsyncConnection _db;
+        public DatabaseHelper()
         {
-            var databasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data.db");
-
-            _connection = new SQLiteConnection(databasePath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
-
-            _connection.CreateTable<InstallationEntity>();
-            _connection.CreateTable<MeasurementEntity>();
-            _connection.CreateTable<MeasurementItemEntity>();
-            _connection.CreateTable<MeasurementValue>();
-            _connection.CreateTable<AirQualityIndex>();
-            _connection.CreateTable<AirQualityStandard>();
+            _databasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Database.db");
+            _db = new SQLiteAsyncConnection(_databasePath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
         }
 
-        public void SaveInstallations(IEnumerable<Installation> installations)
+        public async Task CreateTables()
         {
-            var entries = installations.Select(s => new InstallationEntity(s));
+            await _db.CreateTableAsync<InstallationEntity>();
+            await _db.CreateTableAsync<MeasurementEntity>();
+            await _db.CreateTableAsync<MeasurementItemEntity>();
+            await _db.CreateTableAsync<MeasurementValue>();
+            await _db.CreateTableAsync<AirQualityIndex>();
+            await _db.CreateTableAsync<AirQualityStandard>();
+        }
 
-            _connection?.RunInTransaction(() =>
+        public async Task SaveInstalations(List<Installation> installations)
+        {
+            var objList = new List<InstallationEntity>();
+            foreach (var item in installations)
             {
-                _connection?.DeleteAll<InstallationEntity>();
-                _connection?.InsertAll(entries);
-            });
-        }
-
-        public IEnumerable<Installation> GetInstallations()
-        {
-            return _connection?.Table<InstallationEntity>().Select(s => new Installation(s)).ToList();
-        }
-
-        public void SaveMeasurements(IEnumerable<Measurement> measurements)
-        {
-            _connection?.RunInTransaction(() =>
-            {
-                _connection?.DeleteAll<MeasurementValue>();
-                _connection?.DeleteAll<AirQualityIndex>();
-                _connection?.DeleteAll<AirQualityStandard>();
-                _connection?.DeleteAll<MeasurementItemEntity>();
-                _connection?.DeleteAll<MeasurementEntity>();
-
-
-                foreach(var measurement in measurements)
+                var installationEntity = new InstallationEntity
                 {
-                    _connection?.InsertAll(measurement.Current.Values, false);
-                    _connection?.InsertAll(measurement.Current.Indexes, false);
-                    _connection?.InsertAll(measurement.Current.Standards, false);
-
-                    var measurementItemEntity = new MeasurementItemEntity(measurement.Current);
-                    _connection?.Insert(measurementItemEntity);
-
-                    var measurementEntity = new MeasurementEntity(measurementItemEntity.Id, measurement.Installation.Id);
-                    _connection?.Insert(measurementEntity);
-                }
-            });
-        }
-
-        public IEnumerable<Measurement> GetMeasurements()
-        {
-            return _connection?.Table<MeasurementEntity>().Select(s =>
-            {
-                var measurementItem = GetMeasurementItem(s.CurrentMeasurementItemId);
-                var installation = GetInstallation(s.InstallationId);
-                return new Measurement(measurementItem, installation);
-            }).ToList();
-        }
-
-        private MeasurementItem GetMeasurementItem(int id)
-        {
-            var entity = _connection?.Get<MeasurementItemEntity>(id);
-            var valueIds = JsonConvert.DeserializeObject<int[]>(entity.MeasurementValueIds);
-            var indexIds = JsonConvert.DeserializeObject<int[]>(entity.AirQualityIndexIds);
-            var standardIds = JsonConvert.DeserializeObject<int[]>(entity.AirQualityStandardIds);
-            var values = _connection?.Table<MeasurementValue>().Where(s => valueIds.Contains(s.Id)).ToArray();
-            var indexes = _connection?.Table<AirQualityIndex>().Where(s => indexIds.Contains(s.Id)).ToArray();
-            var standards = _connection?.Table<AirQualityStandard>().Where(s => standardIds.Contains(s.Id)).ToArray();
-            return new MeasurementItem(entity, values, indexes, standards);
-        }
-
-        private Installation GetInstallation(string id)
-        {
-            var entity = _connection?.Get<InstallationEntity>(id);
-            return new Installation(entity);
-        }
-
-        #region IDisposable Support
-        private bool disposedValue = false; // To detect redundant calls
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!disposedValue)
-            {
-                if (disposing)
-                {
-                    _connection?.Dispose();
-                    _connection = null;
-                }
-
-                disposedValue = true;
+                    Address = JsonConvert.SerializeObject(item.Address),
+                    Elevation = item.Elevation,
+                    IsAirlyInstallation = item.IsAirlyInstallation,
+                    Sponsor = JsonConvert.SerializeObject(item.Sponsor),
+                    Measurement = JsonConvert.SerializeObject(item.Measurement)
+                };
+                objList.Add(installationEntity);
             }
+
+            await _db.RunInTransactionAsync(t =>
+            {
+                t.DeleteAll<InstallationEntity>();
+                t.InsertAll(objList, false);
+            });
         }
 
-        // This code added to correctly implement the disposable pattern.
-        public void Dispose()
+        public async Task SaveMeasurements(List<Measurement> measurements)
         {
-            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-            Dispose(true);
+            await _db.RunInTransactionAsync(t =>
+            {
+                t.DeleteAll<MeasurementEntity>();
+                t.DeleteAll<MeasurementItemEntity>();
+                t.DeleteAll<MeasurementValue>();
+                t.DeleteAll<AirQualityIndex>();
+                t.DeleteAll<AirQualityStandard>();
+
+                foreach (var item in measurements)
+                {
+                    t.InsertAll(item.Current.Values, false);
+                    t.InsertAll(item.Current.Indexes, false);
+                    t.InsertAll(item.Current.Standards, false);
+                    var obj = new MeasurementItemEntity
+                    {
+                        FromDateTime = item.Current.FromDateTime,
+                        TillDateTime = item.Current.TillDateTime,
+                        Indexes = JsonConvert.SerializeObject(item.Current.Indexes),
+                        Standards = JsonConvert.SerializeObject(item.Current.Standards),
+                        Values = JsonConvert.SerializeObject(item.Current.Values)
+                    };
+                    t.Insert(obj);
+                    var measurementEntity = new MeasurementEntity { CurrentId = obj.Id };
+                    t.Insert(measurementEntity);
+                }
+            }); 
         }
-        #endregion
+
+        public async Task<List<Installation>> GetInstallations()
+        {
+            var installationsEntity = await _db.Table<InstallationEntity>().ToListAsync();
+            var installations = new List<Installation>();
+            foreach (var item in installationsEntity)
+            {
+                var installation = new Installation
+                {
+                    Id = int.Parse(item.Id),
+                    Address = JsonConvert.DeserializeObject<Address>(item.Address),
+                    Elevation = item.Elevation,
+                    IsAirlyInstallation = item.IsAirlyInstallation,
+                    Sponsor = JsonConvert.DeserializeObject<Sponsor>(item.Sponsor),
+                    Measurement = JsonConvert.DeserializeObject<Measurement>(item.Measurement)
+                };
+                installations.Add(installation);
+            }
+            return installations;
+        }
     }
 }

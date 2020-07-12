@@ -1,18 +1,22 @@
 ﻿using System;
-using Newtonsoft.Json;
+using System.Collections.Generic;
+using System.Text;
 
 namespace AirMonitor.Models
 {
-    public struct Address
+    public class Address
     {
+        public Address()
+        {
+
+        }
+        public string Street { get; set; }
         public string Country { get; set; }
         public string City { get; set; }
-        public string Street { get; set; }
-        public string Number { get; set; }
+        public int? Number { get; set; }
         public string DisplayAddress1 { get; set; }
         public string DisplayAddress2 { get; set; }
 
-        [JsonIgnore]
-        public string Description => $"{Street} {Number}, {City}";
+        public string Description => $"{Street} {DisplayAddress1} {DisplayAddress2}";
     }
 }

@@ -1,108 +1,92 @@
-﻿using System;
+﻿using AirMonitor.Models;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
-using AirMonitor.Models;
+using System.Runtime.CompilerServices;
+using System.Text;
+using Xamarin.Forms;
 
 namespace AirMonitor.ViewModels
 {
-    public class DetailsViewModel : BaseViewModel
+    public class DetailsViewModel: BaseViewModel
     {
+        private readonly INavigation _navigation;
         public DetailsViewModel()
         {
-        }
 
-        private Measurement _item;
-        public Measurement Item
+        }
+        public DetailsViewModel(INavigation navigation, Installation installation)
         {
-            get => _item;
-            set
-            {
-                SetProperty(ref _item, value);
-
-                UpdateProperties();
-            }
+            _navigation = navigation;
+            _installation = installation;
+            _caqiValue = Convert.ToInt32(installation.Measurement.Current.Indexes.FirstOrDefault().Value);
+            _pm25Value = Convert.ToInt32(installation.Measurement.Current.Values.FirstOrDefault(x => x.Name == "PM25").Value);
+            _pm10Value = Convert.ToInt32(installation.Measurement.Current.Values.FirstOrDefault(x => x.Name == "PM10").Value);
+            _humidity = Convert.ToInt32(installation.Measurement.Current.Values.FirstOrDefault(x => x.Name == "HUMIDITY").Value);
+            _pressure = Convert.ToInt32(installation.Measurement.Current.Values.FirstOrDefault(x => x.Name == "PRESSURE").Value);
+            _description = installation.Measurement.Current.Indexes.FirstOrDefault().Description;
+            _advidce = installation.Measurement.Current.Indexes.FirstOrDefault().Advice;
+            _temperature = Convert.ToInt32(installation.Measurement.Current.Values.FirstOrDefault(x => x.Name == "TEMPERATURE").Value);
         }
 
-        private void UpdateProperties()
-        {
-            if (Item?.Current == null) return;
-            var current = Item?.Current;
-            var index = current.Indexes?.FirstOrDefault(c => c.Name == "AIRLY_CAQI");
-            var values = current.Values;
-            var standards = current.Standards;
+        private Installation _installation;
 
-            CaqiValue = (int)Math.Round(index?.Value ?? 0);
-            CaqiTitle = index.Description;
-            CaqiDescription = index.Advice;
-            Pm25Value = (int)Math.Round(values?.FirstOrDefault(s => s.Name == "PM25")?.Value ?? 0);
-            Pm10Value = (int)Math.Round(values?.FirstOrDefault(s => s.Name == "PM10")?.Value ?? 0);
-            HumidityPercent = (int)Math.Round(values?.FirstOrDefault(s => s.Name == "HUMIDITY")?.Value ?? 0);
-            PressureValue = (int)Math.Round(values?.FirstOrDefault(s => s.Name == "PRESSURE")?.Value ?? 0);
-            Pm25Percent = (int)Math.Round(standards?.FirstOrDefault(s => s.Pollutant == "PM25")?.Percent ?? 0);
-            Pm10Percent = (int)Math.Round(standards?.FirstOrDefault(s => s.Pollutant == "PM10")?.Percent ?? 0);
-        }
-
-        private int _caqiValue = 57;
+        private int _caqiValue;
         public int CaqiValue
         {
             get => _caqiValue;
             set => SetProperty(ref _caqiValue, value);
         }
 
-        private string _caqiTitle = "Świetna jakość!";
-        public string CaqiTitle
-        {
-            get => _caqiTitle;
-            set => SetProperty(ref _caqiTitle, value);
-        }
-
-        private string _caqiDescription = "Możesz bezpiecznie wyjść z domu bez swojej maski anty-smogowej i nie bać się o swoje zdrowie.";
-        public string CaqiDescription
-        {
-            get => _caqiDescription;
-            set => SetProperty(ref _caqiDescription, value);
-        }
-
-        private int _pm25Value = 34;
+        private int _pm25Value;
         public int Pm25Value
         {
             get => _pm25Value;
             set => SetProperty(ref _pm25Value, value);
         }
 
-        private int _pm25Percent = 137;
-        public int Pm25Percent
-        {
-            get => _pm25Percent;
-            set => SetProperty(ref _pm25Percent, value);
-        }
-
-        private int _pm10Value = 67;
+        private int _pm10Value;
         public int Pm10Value
         {
             get => _pm10Value;
             set => SetProperty(ref _pm10Value, value);
         }
 
-        private int _pm10Percent = 135;
-        public int Pm10Percent
+        private int _humidity;
+        public int Humidity
         {
-            get => _pm10Percent;
-            set => SetProperty(ref _pm10Percent, value);
+            get => _humidity;
+            set => SetProperty(ref _humidity, value);
         }
 
-        private int _humidityPercent = 29;
-        public int HumidityPercent
+        private int _pressure;
+        public int Pressure
         {
-            get => _humidityPercent;
-            set => SetProperty(ref _humidityPercent, value);
+            get => _pressure;
+            set => SetProperty(ref _pressure, value);
         }
 
-        private int _pressureValue = 1027;
-        public int PressureValue
+        private string _description;
+        public string Description
         {
-            get => _pressureValue;
-            set => SetProperty(ref _pressureValue, value);
+            get => _description;
+            set => SetProperty(ref _description, value);
         }
+
+        private string _advidce;
+        public string Advice
+        {
+            get => _advidce;
+            set => SetProperty(ref _advidce, value);
+        }
+
+        private int _temperature;
+        public int Temperature
+        {
+            get => _temperature;
+            set => SetProperty(ref _temperature, value);
+        }
+
     }
 }

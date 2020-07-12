@@ -1,28 +1,23 @@
 ﻿using AirMonitor.ViewModels;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
 using Xamarin.Forms;
 using Xamarin.Forms.Xaml;
 
 namespace AirMonitor.Views
 {
     [XamlCompilation(XamlCompilationOptions.Compile)]
-    public partial class HomePage : ContentPage
+    public partial class MapPage : ContentPage
     {
-        public HomePage()
+        public MapPage()
         {
             InitializeComponent();
             BindingContext = new HomeViewModel(Navigation);
         }
 
-        private void OnItemTapped(object sender, ItemTappedEventArgs e)
+        private void Pin_InfoWindowClicked(object sender, Xamarin.Forms.Maps.PinClickedEventArgs e)
         {
+            var address = (sender as Xamarin.Forms.Maps.Pin).Address;
             var context = BindingContext as HomeViewModel;
-            context.GoToDetailsCommand.Execute(e.Item);
+            context.GoToDetailsCommandFromMap.Execute(address);
         }
     }
 }

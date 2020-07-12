@@ -4,12 +4,13 @@ using System.Text;
 
 namespace AirMonitor.Models
 {
-    public class Measurement
+    public class Loc
     {
-        public Measurement()
+        public Loc()
         {
 
         }
-        public MeasurementItem Current { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
     }
 }
