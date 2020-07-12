@@ -281,7 +281,8 @@ namespace AirMonitor.ViewModels
 
                 return location;
             }
-            // Handle different exceptions separately, for example to display different messages to the user
+
+
             catch (FeatureNotSupportedException ex)
             {
                 System.Diagnostics.Debug.WriteLine(ex);

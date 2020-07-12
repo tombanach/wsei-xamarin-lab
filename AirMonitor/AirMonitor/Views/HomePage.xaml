@@ -11,13 +11,18 @@
                   IsPullToRefreshEnabled="True"
                   RefreshCommand="{Binding RefreshCommand}"
                   IsRefreshing="{Binding IsRefreshing}">
+
             <ListView.ItemTemplate>
                 <DataTemplate>
+
                     <TextCell Text="{Binding Installation.Address.Description}"
                               Detail="{Binding CurrentDisplayValue, StringFormat='CAQI: {0}'}"/>
                 </DataTemplate>
             </ListView.ItemTemplate>
+
         </ListView>
+
+
         <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" HorizontalOptions="Center" VerticalOptions="Center"/>
     </Grid>
 </ContentPage>

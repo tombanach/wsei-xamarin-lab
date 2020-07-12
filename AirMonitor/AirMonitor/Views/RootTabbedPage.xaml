@@ -5,6 +5,7 @@
             xmlns:android="clr-namespace:Xamarin.Forms.PlatformConfiguration.AndroidSpecific;assembly=Xamarin.Forms.Core"
             xmlns:views="clr-namespace:AirMonitor.Views"
             android:TabbedPage.ToolbarPlacement="Bottom">
+
     <NavigationPage Title="Home" IconImageSource="baseline_home_black_24">
         <x:Arguments>
             <views:HomePage/>

@@ -154,7 +154,6 @@
                                 Text="1026 hPa"
                                 FontSize="20"
                                 TextColor="Black" />
-                            <!-- Set Maximum before Minimum in Slider -->
                             <Slider
                                 Maximum="1100"
                                 Minimum="900"

@@ -123,7 +123,6 @@
                             <Label
                                 Text="{Binding PressureValue, StringFormat='{0} hPa'}"
                                 Style="{StaticResource NormalTextLabelStyle}"/>
-                            <!-- Set Maximum before Minimum in Slider -->
                             <Slider
                                 Maximum="1100"
                                 Minimum="900"
